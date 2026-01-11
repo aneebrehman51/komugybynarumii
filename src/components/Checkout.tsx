@@ -1,9 +1,8 @@
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, CheckCircle } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { sendOrderEmails } from '../services/emailService';
 
 interface FormData {
   name: string;
@@ -31,8 +30,6 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const [orderToken, setOrderToken] = useState<string | null>(null);
 
   const inputClass =
     'w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none';
@@ -53,10 +50,18 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
     setLoading(true);
 
     try {
+      if (formData.paymentMethod === 'cash') {
+        localStorage.setItem('pickup_order_data', JSON.stringify({
+          formData,
+          cartItems,
+        }));
+        navigate('/pickup-payment');
+        return;
+      }
+
       const paymentExpiresAt = new Date();
       paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 5);
 
-      // Create order
       const { data, error: orderError } = await supabase
         .from('orders')
         .insert([
@@ -65,7 +70,7 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
             email: formData.email,
             phone: formData.phone,
             address: formData.address,
-            payment_method: formData.paymentMethod,
+            payment_method: 'online',
             payment_status: 'pending',
             payment_expires_at: paymentExpiresAt.toISOString(),
           },
@@ -78,9 +83,6 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
         return;
       }
 
-      setOrderToken(data.order_token);
-
-      // Save order items
       const itemsPayload = cartItems.map((item) => ({
         order_id: data.id,
         product_name: item.name,
@@ -97,49 +99,14 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
         return;
       }
 
-      // ✅ SEND EMAIL ONLY FOR CASH
-      if (formData.paymentMethod === 'cash') {
-        sendOrderEmails({
-          id: data.id,
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          address: formData.address,
-          payment_method: 'cash',
-        }).catch(console.error);
-
-        setSuccess(true);
-      } else {
-        // Online payment → go to payment page, no email yet
-        localStorage.setItem('order_token', data.order_token);
-        navigate(`/payment?ref=${data.order_token}`);
-      }
+      localStorage.setItem('order_token', data.order_token);
+      navigate(`/payment?ref=${data.order_token}`);
     } catch {
       setError('Something went wrong.');
     } finally {
       setLoading(false);
     }
   };
-
-  if (success) {
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-3">
-        <div className="bg-white rounded-lg p-6 max-w-sm w-full text-center">
-          <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
-          <h2 className="text-lg font-semibold mb-1">Order Placed</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Order Token: {orderToken}
-          </p>
-          <button
-            onClick={onClose}
-            className="w-full bg-amber-600 text-white py-2 rounded-md text-sm"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-3">
@@ -177,7 +144,7 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
           <div className="space-y-1 text-sm">
             <label className="flex items-center gap-2">
               <input type="radio" checked={formData.paymentMethod === 'cash'} onChange={() => setFormData({ ...formData, paymentMethod: 'cash' })} />
-              Cash on Delivery
+              Pick Up Yourself
             </label>
 
             <label className="flex items-center gap-2">
