@@ -57,7 +57,7 @@ export default function PickupPayment() {
 
     try {
       const paymentExpiresAt = new Date();
-      paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 5);
+      paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 10);
 
       const { data, error: orderError } = await supabase
         .from('orders')
@@ -112,8 +112,12 @@ export default function PickupPayment() {
         setSuccess(true);
       } else {
         localStorage.removeItem('pickup_order_data');
-        localStorage.setItem('order_token', data.order_token);
-        navigate(`/payment?ref=${data.order_token}`);
+        localStorage.setItem('pickup_online_order_data', JSON.stringify({
+          formData: orderData.formData,
+          cartItems: orderData.cartItems,
+          orderId: data.id,
+        }));
+        navigate('/pickup-online-payment');
       }
     } catch {
       setError('Something went wrong.');
