@@ -27,6 +27,7 @@ export default function PickupPayment() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [orderToken, setOrderToken] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string>('');
 
   useEffect(() => {
     const storedData = localStorage.getItem('pickup_order_data');
@@ -110,7 +111,7 @@ export default function PickupPayment() {
 
         localStorage.removeItem('pickup_order_data');
         setSuccess(true);
-      } else {
+      } else if (selectedPayment === 'online') {
         localStorage.removeItem('pickup_order_data');
         localStorage.setItem('pickup_online_order_data', JSON.stringify({
           formData: orderData.formData,
@@ -118,6 +119,7 @@ export default function PickupPayment() {
           orderId: data.id,
         }));
         navigate('/pickup-online-payment');
+        return;
       }
     } catch {
       setError('Something went wrong.');
