@@ -9,7 +9,7 @@ interface FormData {
   email: string;
   phone: string;
   address: string;
-  paymentMethod: 'cash' | 'online';
+  paymentMethod: 'cash' | 'delivery';
 }
 
 interface CheckoutProps {
@@ -28,6 +28,8 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
     paymentMethod: 'cash',
   });
 
+  const DELIVERY_CHARGE = 300;
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,6 +46,9 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
   const calculateTotal = () =>
     cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+  const calculateDeliveryTotal = () =>
+    calculateTotal() + DELIVERY_CHARGE;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -59,48 +64,55 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
         return;
       }
 
-      const paymentExpiresAt = new Date();
-      paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 5);
+      if (formData.paymentMethod === 'delivery') {
+        const paymentExpiresAt = new Date();
+        paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 10);
 
-      const { data, error: orderError } = await supabase
-        .from('orders')
-        .insert([
-          {
-            name: formData.name,
-            email: formData.email,
-            phone: formData.phone,
-            address: formData.address,
-            payment_method: 'online',
-            payment_status: 'pending',
-            payment_expires_at: paymentExpiresAt.toISOString(),
-          },
-        ])
-        .select('id, order_token')
-        .maybeSingle();
+        const { data, error: orderError } = await supabase
+          .from('orders')
+          .insert([
+            {
+              name: formData.name,
+              email: formData.email,
+              phone: formData.phone,
+              address: formData.address,
+              payment_method: 'online',
+              payment_status: 'pending',
+              payment_expires_at: paymentExpiresAt.toISOString(),
+            },
+          ])
+          .select('id, order_token')
+          .maybeSingle();
 
-      if (orderError || !data) {
-        setError('Failed to place order.');
+        if (orderError || !data) {
+          setError('Failed to place order.');
+          return;
+        }
+
+        const itemsPayload = cartItems.map((item) => ({
+          order_id: data.id,
+          product_name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        }));
+
+        const { error: itemsError } = await supabase
+          .from('order_items')
+          .insert(itemsPayload);
+
+        if (itemsError) {
+          setError('Failed to save order items.');
+          return;
+        }
+
+        localStorage.setItem('delivery_order_data', JSON.stringify({
+          formData,
+          cartItems,
+          orderId: data.id,
+        }));
+        navigate('/delivery-payment');
         return;
       }
-
-      const itemsPayload = cartItems.map((item) => ({
-        order_id: data.id,
-        product_name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(itemsPayload);
-
-      if (itemsError) {
-        setError('Failed to save order items.');
-        return;
-      }
-
-      localStorage.setItem('order_token', data.order_token);
-      navigate(`/payment?ref=${data.order_token}`);
     } catch {
       setError('Something went wrong.');
     } finally {
@@ -137,8 +149,26 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
             className={`${inputClass} resize-none`}
           />
 
-          <div className="border rounded-md px-3 py-2 bg-gray-50 text-sm font-medium">
-            Total: {calculateTotal()} PKR
+          <div className="border rounded-md px-3 py-2 bg-gray-50 text-sm space-y-1">
+            <div className="flex justify-between">
+              <span>Subtotal:</span>
+              <span className="font-medium">{calculateTotal()} PKR</span>
+            </div>
+            {formData.paymentMethod === 'delivery' && (
+              <>
+                <div className="flex justify-between text-gray-600">
+                  <span>Delivery Charge:</span>
+                  <span className="font-medium">{DELIVERY_CHARGE} PKR</span>
+                </div>
+                <div className="border-t pt-1 flex justify-between font-bold text-amber-700">
+                  <span>Total:</span>
+                  <span>{calculateDeliveryTotal()} PKR</span>
+                </div>
+              </>
+            )}
+            {formData.paymentMethod === 'cash' && (
+              <div className="font-bold text-amber-700">Total: {calculateTotal()} PKR</div>
+            )}
           </div>
 
           <div className="space-y-1 text-sm">
@@ -148,8 +178,8 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
             </label>
 
             <label className="flex items-center gap-2">
-              <input type="radio" checked={formData.paymentMethod === 'online'} onChange={() => setFormData({ ...formData, paymentMethod: 'online' })} />
-              Online Payment
+              <input type="radio" checked={formData.paymentMethod === 'delivery'} onChange={() => setFormData({ ...formData, paymentMethod: 'delivery' })} />
+              Delivery
             </label>
           </div>
 
