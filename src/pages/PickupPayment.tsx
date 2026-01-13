@@ -142,10 +142,15 @@ export default function PickupPayment() {
         <div className="bg-white rounded-lg p-8 max-w-md w-full text-center">
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-semibold mb-2">Order Placed Successfully</h2>
-          <p className="text-gray-600 mb-2">Your order has been confirmed!</p>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+          <p className="text-gray-600 mb-4">Your order has been confirmed!</p>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <p className="text-sm text-gray-600 mb-1">Order Token:</p>
             <p className="font-mono font-bold text-amber-900 text-lg">{orderToken}</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
+            <p className="font-semibold text-gray-900 mb-2">Pickup Location & Hours</p>
+            <p className="text-sm text-gray-700 mb-2"><span className="font-medium">Address:</span> F-7/4 ST:50 House:16</p>
+            <p className="text-sm text-gray-700"><span className="font-medium">Hours:</span> 9:00 AM to 4:00 PM</p>
           </div>
           <button
             onClick={() => navigate('/')}
