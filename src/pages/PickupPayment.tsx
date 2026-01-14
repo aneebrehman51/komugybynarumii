@@ -57,49 +57,49 @@ export default function PickupPayment() {
     setLoading(true);
 
     try {
-      const paymentExpiresAt = new Date();
-      paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 10);
-
-      const { data, error: orderError } = await supabase
-        .from('orders')
-        .insert([
-          {
-            name: orderData.formData.name,
-            email: orderData.formData.email,
-            phone: orderData.formData.phone,
-            address: orderData.formData.address,
-            payment_method: selectedPayment,
-            payment_status: 'pending',
-            payment_expires_at: paymentExpiresAt.toISOString(),
-          },
-        ])
-        .select('id, order_token')
-        .maybeSingle();
-
-      if (orderError || !data) {
-        setError('Failed to place order.');
-        return;
-      }
-
-      setOrderToken(data.order_token);
-
-      const itemsPayload = orderData.cartItems.map((item) => ({
-        order_id: data.id,
-        product_name: item.name,
-        price: item.price,
-        quantity: item.quantity,
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(itemsPayload);
-
-      if (itemsError) {
-        setError('Failed to save order items.');
-        return;
-      }
-
       if (selectedPayment === 'cash') {
+        const paymentExpiresAt = new Date();
+        paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 10);
+
+        const { data, error: orderError } = await supabase
+          .from('orders')
+          .insert([
+            {
+              name: orderData.formData.name,
+              email: orderData.formData.email,
+              phone: orderData.formData.phone,
+              address: orderData.formData.address,
+              payment_method: 'cash',
+              payment_status: 'confirmed',
+              payment_expires_at: paymentExpiresAt.toISOString(),
+            },
+          ])
+          .select('id, order_token')
+          .maybeSingle();
+
+        if (orderError || !data) {
+          setError('Failed to place order.');
+          return;
+        }
+
+        setOrderToken(data.order_token);
+
+        const itemsPayload = orderData.cartItems.map((item) => ({
+          order_id: data.id,
+          product_name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+        }));
+
+        const { error: itemsError } = await supabase
+          .from('order_items')
+          .insert(itemsPayload);
+
+        if (itemsError) {
+          setError('Failed to save order items.');
+          return;
+        }
+
         sendOrderEmails({
           id: data.id,
           name: orderData.formData.name,
@@ -116,7 +116,6 @@ export default function PickupPayment() {
         localStorage.setItem('pickup_online_order_data', JSON.stringify({
           formData: orderData.formData,
           cartItems: orderData.cartItems,
-          orderId: data.id,
         }));
         navigate('/pickup-online-payment');
         return;

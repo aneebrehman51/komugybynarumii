@@ -17,7 +17,6 @@ interface OrderData {
     price: number;
     quantity: number;
   }>;
-  orderId: string;
 }
 
 const DELIVERY_CHARGE = 300;
@@ -113,7 +112,7 @@ export default function DeliveryPayment() {
     setLoading(true);
 
     try {
-      const fileName = `${orderData.orderId}-${Date.now()}.jpg`;
+      const fileName = `delivery-${Date.now()}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from('payment_proofs')
@@ -128,32 +127,52 @@ export default function DeliveryPayment() {
         .from('payment_proofs')
         .getPublicUrl(fileName);
 
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({
-          payment_proof_url: urlData.publicUrl,
-          payment_proof_submitted_at: new Date().toISOString(),
-          payment_status: 'pending_verification',
-        })
-        .eq('id', orderData.orderId);
+      const paymentExpiresAt = new Date();
+      paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 10);
 
-      if (updateError) {
-        setError('Failed to save payment proof. Please try again.');
+      const { data, error: orderError } = await supabase
+        .from('orders')
+        .insert([
+          {
+            name: orderData.formData.name,
+            email: orderData.formData.email,
+            phone: orderData.formData.phone,
+            address: orderData.formData.address,
+            payment_method: 'online',
+            payment_status: 'pending_verification',
+            payment_expires_at: paymentExpiresAt.toISOString(),
+            payment_proof_url: urlData.publicUrl,
+            payment_proof_submitted_at: new Date().toISOString(),
+          },
+        ])
+        .select('id, order_token')
+        .maybeSingle();
+
+      if (orderError || !data) {
+        setError('Failed to create order. Please try again.');
         return;
       }
 
-      const { data: updatedOrder } = await supabase
-        .from('orders')
-        .select('order_token')
-        .eq('id', orderData.orderId)
-        .maybeSingle();
+      const itemsPayload = orderData.cartItems.map((item) => ({
+        order_id: data.id,
+        product_name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      }));
 
-      if (updatedOrder) {
-        setOrderToken(updatedOrder.order_token);
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(itemsPayload);
+
+      if (itemsError) {
+        setError('Failed to save order items. Please try again.');
+        return;
       }
 
+      setOrderToken(data.order_token);
+
       sendOrderEmails({
-        id: orderData.orderId,
+        id: data.id,
         name: orderData.formData.name,
         email: orderData.formData.email,
         phone: orderData.formData.phone,

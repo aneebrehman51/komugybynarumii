@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 
 interface FormData {
   name: string;
@@ -65,50 +64,9 @@ export default function Checkout({ cartItems, onClose }: CheckoutProps) {
       }
 
       if (formData.paymentMethod === 'delivery') {
-        const paymentExpiresAt = new Date();
-        paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 10);
-
-        const { data, error: orderError } = await supabase
-          .from('orders')
-          .insert([
-            {
-              name: formData.name,
-              email: formData.email,
-              phone: formData.phone,
-              address: formData.address,
-              payment_method: 'online',
-              payment_status: 'pending',
-              payment_expires_at: paymentExpiresAt.toISOString(),
-            },
-          ])
-          .select('id, order_token')
-          .maybeSingle();
-
-        if (orderError || !data) {
-          setError('Failed to place order.');
-          return;
-        }
-
-        const itemsPayload = cartItems.map((item) => ({
-          order_id: data.id,
-          product_name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-        }));
-
-        const { error: itemsError } = await supabase
-          .from('order_items')
-          .insert(itemsPayload);
-
-        if (itemsError) {
-          setError('Failed to save order items.');
-          return;
-        }
-
         localStorage.setItem('delivery_order_data', JSON.stringify({
           formData,
           cartItems,
-          orderId: data.id,
         }));
         navigate('/delivery-payment');
         return;

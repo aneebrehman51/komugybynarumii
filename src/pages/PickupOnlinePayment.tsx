@@ -17,7 +17,6 @@ interface OrderData {
     price: number;
     quantity: number;
   }>;
-  orderId: string;
 }
 
 export default function PickupOnlinePayment() {
@@ -107,7 +106,7 @@ export default function PickupOnlinePayment() {
     setLoading(true);
 
     try {
-      const fileName = `${orderData.orderId}-${Date.now()}.jpg`;
+      const fileName = `pickup-${Date.now()}.jpg`;
 
       const { error: uploadError } = await supabase.storage
         .from('payment_proofs')
@@ -122,29 +121,58 @@ export default function PickupOnlinePayment() {
         .from('payment_proofs')
         .getPublicUrl(fileName);
 
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({
-          payment_proof_url: urlData.publicUrl,
-          payment_proof_submitted_at: new Date().toISOString(),
-          payment_status: 'pending_verification',
-        })
-        .eq('id', orderData.orderId);
+      const paymentExpiresAt = new Date();
+      paymentExpiresAt.setMinutes(paymentExpiresAt.getMinutes() + 10);
 
-      if (updateError) {
-        setError('Failed to save payment proof. Please try again.');
+      const { data, error: orderError } = await supabase
+        .from('orders')
+        .insert([
+          {
+            name: orderData.formData.name,
+            email: orderData.formData.email,
+            phone: orderData.formData.phone,
+            address: orderData.formData.address,
+            payment_method: 'online',
+            payment_status: 'pending_verification',
+            payment_expires_at: paymentExpiresAt.toISOString(),
+            payment_proof_url: urlData.publicUrl,
+            payment_proof_submitted_at: new Date().toISOString(),
+          },
+        ])
+        .select('id, order_token')
+        .maybeSingle();
+
+      if (orderError || !data) {
+        setError('Failed to create order. Please try again.');
         return;
       }
 
-      const { data: updatedOrder } = await supabase
-        .from('orders')
-        .select('order_token')
-        .eq('id', orderData.orderId)
-        .maybeSingle();
+      const itemsPayload = orderData.cartItems.map((item) => ({
+        order_id: data.id,
+        product_name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+      }));
 
-      if (updatedOrder) {
-        setOrderToken(updatedOrder.order_token);
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(itemsPayload);
+
+      if (itemsError) {
+        setError('Failed to save order items. Please try again.');
+        return;
       }
+
+      setOrderToken(data.order_token);
+
+      sendOrderEmails({
+        id: data.id,
+        name: orderData.formData.name,
+        email: orderData.formData.email,
+        phone: orderData.formData.phone,
+        address: orderData.formData.address,
+        payment_method: 'online',
+      }).catch(console.error);
 
       localStorage.removeItem('pickup_online_order_data');
       setSuccess(true);
@@ -176,9 +204,14 @@ export default function PickupOnlinePayment() {
           <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-semibold mb-2">Payment Submitted</h2>
           <p className="text-gray-600 mb-4">Your payment proof has been received. We'll verify it shortly.</p>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <p className="text-sm text-gray-600 mb-1">Order Token:</p>
             <p className="font-mono font-bold text-amber-900 text-lg">{orderToken}</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
+            <p className="font-semibold text-gray-900 mb-2">Pickup Location & Hours</p>
+            <p className="text-sm text-gray-700 mb-2"><span className="font-medium">Address:</span> F-7/4 ST:50 House:16</p>
+            <p className="text-sm text-gray-700"><span className="font-medium">Hours:</span> 9:00 AM to 4:00 PM</p>
           </div>
           <button
             onClick={() => navigate('/')}
